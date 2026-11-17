@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>VICE HEAT — Port Soleil</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0c1218; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .hidden { display: none !important; }
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  #topleft { position: absolute; top: 14px; left: 16px; }
+  #stars { font-size: 26px; letter-spacing: 2px; }
+  #cash { font-size: 26px; font-weight: 700; color: #7dff9a; margin-top: 2px; }
+  #health { width: 190px; height: 10px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.5); border-radius: 5px; margin-top: 8px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #2ecc71; }
+  #minimap-wrap { position: absolute; top: 14px; right: 16px; border: 2px solid rgba(255,255,255,.65); border-radius: 6px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.5); }
+  #minimap { display: block; width: 180px; height: 180px; }
+  #objective { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%); font-size: 19px; font-weight: 600; background: rgba(0,0,0,.55); padding: 8px 18px; border-radius: 8px; white-space: nowrap; }
+  #objective-dist { color: #ffd23e; margin-left: 8px; }
+  #speed { position: absolute; bottom: 18px; right: 20px; font-size: 24px; font-weight: 700; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: #fff; box-shadow: 0 0 3px #000; }
+  #crosshair::before { left: 10px; top: 0; width: 2px; height: 22px; }
+  #crosshair::after { left: 0; top: 10px; width: 22px; height: 2px; }
+  #toast { position: absolute; top: 96px; left: 50%; transform: translateX(-50%); font-size: 20px; font-weight: 600; background: rgba(20,26,34,.85); border: 1px solid #ffd23e; color: #ffd23e; padding: 10px 22px; border-radius: 8px; opacity: 0; transition: opacity .3s; white-space: nowrap; }
+  #toast.show { opacity: 1; }
+  #busted-bar { position: absolute; left: 50%; top: 56%; transform: translateX(-50%); width: 260px; text-align: center; }
+  #busted-bar .label { font-size: 15px; font-weight: 700; color: #ff5a4e; letter-spacing: 2px; margin-bottom: 5px; }
+  #busted-track { height: 8px; background: rgba(0,0,0,.6); border: 1px solid #ff5a4e; border-radius: 4px; overflow: hidden; }
+  #busted-fill { height: 100%; width: 0; background: #ff5a4e; }
+  .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(8, 14, 20, .55); z-index: 10; }
+  .panel { width: 620px; max-width: 92vw; background: linear-gradient(160deg, #16222e, #0e1620); border: 1px solid #ffd23e55; border-radius: 14px; padding: 34px 40px; color: #eef1f5; text-align: center; box-shadow: 0 12px 50px rgba(0,0,0,.6); }
+  .panel h1 { margin: 0 0 4px; font-size: 54px; letter-spacing: 4px; color: #ffd23e; }
+  .panel h1 .heat { color: #ff5a4e; }
+  .panel h2 { margin: 0 0 14px; font-size: 15px; font-weight: 600; letter-spacing: 3px; color: #9db8c6; text-transform: uppercase; }
+  .panel p { font-size: 16px; line-height: 1.55; color: #c8d2da; margin: 10px 0; }
+  .panel .controls { font-size: 14px; color: #8fa3b0; line-height: 1.8; margin: 16px 0 22px; }
+  .panel .controls b { color: #eef1f5; }
+  .panel button { pointer-events: auto; cursor: pointer; font-size: 18px; font-weight: 700; color: #111; background: #ffd23e; border: none; border-radius: 8px; padding: 13px 30px; margin: 4px 6px; }
+  .panel button.secondary { background: transparent; color: #ffd23e; border: 2px solid #ffd23e; }
+  .panel button:hover { filter: brightness(1.12); }
+  #over-title { font-size: 64px; color: #ff5a4e; }
+  #complete-stats { font-size: 17px; color: #7dff9a; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game" aria-label="VICE HEAT: an open-world crime game in Port Soleil"></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+
+<div id="hud">
+  <div id="topleft">
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="cash">$0</div>
+    <div id="health"><div id="health-fill"></div></div>
+  </div>
+  <div id="minimap-wrap"><canvas id="minimap" width="180" height="180"></canvas></div>
+  <div id="objective"><span id="objective-text"></span><span id="objective-dist"></span></div>
+  <div id="speed"></div>
+  <div id="crosshair" class="hidden"></div>
+  <div id="toast"></div>
+  <div id="busted-bar" class="hidden"><div class="label">BUSTED — STAND STILL AND IT IS OVER</div><div id="busted-track"><div id="busted-fill"></div></div></div>
+</div>
+
+<div id="screen-menu" class="screen">
+  <div class="panel">
+    <h1>VICE <span class="heat">HEAT</span></h1>
+    <h2>Port Soleil &middot; an open-world crime story</h2>
+    <p>Rex Marlowe is back in Port Soleil for one last job. Drive the streets, steal what you need,
+    outrun the port police, and finish five missions — from a quiet pickup at the docks to the yacht
+    at the marina.</p>
+    <div class="controls">
+      <b>W A S D</b> move / drive &nbsp;·&nbsp; <b>Mouse</b> look &nbsp;·&nbsp; <b>Shift</b> sprint<br>
+      <b>Space</b> jump &nbsp;·&nbsp; <b>E</b> enter / leave car &nbsp;·&nbsp; <b>Click</b> shoot<br>
+      <b>P</b> pause &nbsp;·&nbsp; <b>M</b> mute
+    </div>
+    <button id="btn-new">New Game</button>
+    <button id="btn-continue" class="secondary">Continue</button>
+  </div>
+</div>
+
+<div id="screen-pause" class="screen hidden">
+  <div class="panel">
+    <h1 style="font-size:40px">PAUSED</h1>
+    <p>Port Soleil waits for you.</p>
+    <button id="btn-resume">Resume</button>
+    <button id="btn-restart" class="secondary">Restart Story</button>
+  </div>
+</div>
+
+<div id="screen-over" class="screen hidden">
+  <div class="panel">
+    <h1 id="over-title">BUSTED</h1>
+    <p id="over-sub">The port police took you in.</p>
+    <button id="btn-retry">Try Again</button>
+    <button id="btn-menu-restart" class="secondary">Restart Story</button>
+  </div>
+</div>
+
+<div id="screen-complete" class="screen hidden">
+  <div class="panel">
+    <h1 style="font-size:40px">KING OF THE PORT</h1>
+    <p id="complete-stats"></p>
+    <button id="btn-roam">Keep Roaming</button>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
